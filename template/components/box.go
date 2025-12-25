@@ -17,6 +17,7 @@ type BoxAttribute struct {
 	HeadBorder        string
 	Attr              template.HTMLAttr
 	HeadColor         string
+	Class             string
 	SecondHeaderClass string
 	SecondHeader      template.HTML
 	SecondHeadBorder  string
@@ -28,6 +29,11 @@ type BoxAttribute struct {
 
 func (compo *BoxAttribute) SetTheme(value string) types.BoxAttribute {
 	compo.Theme = value
+	return compo
+}
+
+func (compo *BoxAttribute) SetClass(value string) types.BoxAttribute {
+	compo.Class = value
 	return compo
 }
 
@@ -106,7 +112,7 @@ func (compo *BoxAttribute) WithSecondHeadBorder() types.BoxAttribute {
 func (compo *BoxAttribute) GetContent() template.HTML {
 
 	if compo.Style == "" {
-		compo.Style = template.HTMLAttr(fmt.Sprintf(`style="overflow-x: scroll;overflow-y: hidden;%s"`, compo.Padding))
+		compo.Style = template.HTMLAttr(fmt.Sprintf(`style="%s"`, compo.Padding))
 	} else {
 		compo.Style = template.HTMLAttr(fmt.Sprintf(`style="%s"`, string(compo.Style)+compo.Padding))
 	}

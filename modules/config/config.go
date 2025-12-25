@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -73,6 +73,10 @@ func (d Database) GetDSN() string {
 	if d.Driver == DriverSqlite {
 		return d.File + d.ParamStr()
 	}
+	if d.Driver == DriverOceanBase {
+		return d.User + ":" + d.Pwd + "@tcp(" + d.Host + ":" + d.Port + ")/" +
+			d.Name + d.ParamStr()
+	}
 	return ""
 }
 
@@ -81,8 +85,8 @@ func (d Database) ParamStr() string {
 	if d.Params == nil {
 		d.Params = make(map[string]string)
 	}
-	if d.Driver == DriverMysql || d.Driver == DriverSqlite {
-		if d.Driver == DriverMysql {
+	if d.Driver == DriverMysql || d.Driver == DriverSqlite || d.Driver == DriverOceanBase {
+		if d.Driver == DriverMysql || d.Driver == DriverOceanBase {
 			if _, ok := d.Params["charset"]; !ok {
 				d.Params["charset"] = "utf8mb4"
 			}
@@ -191,6 +195,8 @@ const (
 	DriverPostgresql = "postgresql"
 	// DriverMssql is a const value of mssql driver.
 	DriverMssql = "mssql"
+	// DriverOceanBase is a const value of mysql driver.
+	DriverOceanBase = "oceanbase"
 )
 
 // Store is the file store config. Path is the local store path.
@@ -821,7 +827,7 @@ var (
 
 // ReadFromJson read the Config from a JSON file.
 func ReadFromJson(path string) Config {
-	jsonByte, err := ioutil.ReadFile(path)
+	jsonByte, err := os.ReadFile(path)
 
 	if err != nil {
 		panic(err)
@@ -840,7 +846,7 @@ func ReadFromJson(path string) Config {
 
 // ReadFromYaml read the Config from a YAML file.
 func ReadFromYaml(path string) Config {
-	jsonByte, err := ioutil.ReadFile(path)
+	jsonByte, err := os.ReadFile(path)
 
 	if err != nil {
 		panic(err)
@@ -896,9 +902,7 @@ func SetDefault(cfg *Config) *Config {
 	cfg.IndexUrl = utils.SetDefault(cfg.IndexUrl, "", "/info/manager")
 	cfg.LoginUrl = utils.SetDefault(cfg.LoginUrl, "", "/login")
 	cfg.AuthUserTable = utils.SetDefault(cfg.AuthUserTable, "", "goadmin_users")
-	if cfg.Theme == "adminlte" {
-		cfg.ColorScheme = utils.SetDefault(cfg.ColorScheme, "", "skin-black")
-	}
+	cfg.ColorScheme = utils.SetDefault(cfg.ColorScheme, "", "skin-black")
 	cfg.AssetRootPath = utils.SetDefault(cfg.AssetRootPath, "", "./public/")
 	cfg.AssetRootPath = filepath.ToSlash(cfg.AssetRootPath)
 	cfg.FileUploadEngine.Name = utils.SetDefault(cfg.FileUploadEngine.Name, "", "local")

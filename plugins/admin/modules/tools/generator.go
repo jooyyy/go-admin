@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"go/format"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -12,6 +12,8 @@ import (
 
 	"github.com/GoAdminGroup/go-admin/modules/db/dialect"
 	"github.com/GoAdminGroup/go-admin/modules/language"
+	"golang.org/x/text/cases"
+	textLang "golang.org/x/text/language"
 
 	"github.com/GoAdminGroup/go-admin/modules/db"
 	"github.com/GoAdminGroup/go-admin/modules/utils"
@@ -45,7 +47,7 @@ type Param struct {
 	HideResetButton          bool `json:"hide_reset_button"`
 	HideBackButton           bool `json:"hide_back_button"`
 
-	TablePageTitle    string `json:"table_title"`
+	TablePageTitle    string `json:"table_page_title"`
 	TableDescription  string `json:"table_description"`
 	FormTitle         string `json:"form_title"`
 	FormDescription   string `json:"form_description"`
@@ -58,6 +60,9 @@ type Param struct {
 	Fields       Fields `json:"fields"`
 	FormFields   Fields `json:"form_fields"`
 	DetailFields Fields `json:"detail_fields"`
+
+	PrimaryKey     string `json:"primary_key"`
+	PrimaryKeyType string `json:"primary_key_type"`
 
 	DetailDisplay uint8 `json:"detail_display"`
 
@@ -120,8 +125,10 @@ func NewParam(cfg Config) *Param {
 		dbTable = cfg.Schema + "." + cfg.Table
 	}
 
-	fields := getFieldsFromConn(cfg.Conn, dbTable, cfg.Driver)
-	tt := strings.Title(ta)
+	fields := getFieldsFromConn(cfg.Conn, dbTable, cfg.Driver, cfg.Connection)
+	tt := cases.Title(textLang.Und).String(ta)
+
+	pkey, ptype := fields.GetPrimaryKey()
 
 	return &Param{
 		Connection:               cfg.Connection,
@@ -156,6 +163,9 @@ func NewParam(cfg Config) *Param {
 		TableDescription:         utils.SetDefault(cfg.TableDescription, "", tt),
 		FormTitle:                utils.SetDefault(cfg.FormTitle, "", tt),
 		FormDescription:          utils.SetDefault(cfg.FormDescription, "", tt),
+
+		PrimaryKey:     pkey,
+		PrimaryKeyType: ptype,
 	}
 }
 
@@ -170,7 +180,7 @@ func NewParamWithFields(cfg Config, fields ...Fields) *Param {
 		cfg.Output = cfg.Output[:len(cfg.Output)-1]
 	}
 
-	tt := strings.Title(ta)
+	tt := cases.Title(textLang.Und).String(ta)
 
 	detailFields := make(Fields, 0)
 	if len(fields) > 2 {
@@ -218,6 +228,15 @@ func NewParamWithFields(cfg Config, fields ...Fields) *Param {
 
 type Fields []Field
 
+func (fs Fields) GetPrimaryKey() (string, string) {
+	for _, field := range fs {
+		if field.IsPrimaryKey {
+			return field.Name, field.DBType
+		}
+	}
+	return "", ""
+}
+
 type Field struct {
 	Head         string `json:"head"`
 	Name         string `json:"name"`
@@ -234,6 +253,7 @@ type Field struct {
 	Default      string `json:"default"`
 	CanAdd       bool   `json:"can_add"`
 	ExtraFun     string `json:"extra_fun"`
+	IsPrimaryKey bool   `json:"is_primary_key"`
 }
 
 func Generate(param *Param) error {
@@ -250,7 +270,7 @@ func Generate(param *Param) error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(filepath.FromSlash(param.Output)+"/"+param.RowTable+".go", c, 0644)
+	return os.WriteFile(filepath.FromSlash(param.Output)+"/"+param.RowTable+".go", c, 0644)
 }
 
 const (
@@ -279,7 +299,7 @@ func GenerateTables(outputPath, packageName string, tables []string, isNew bool)
 		err               error
 	)
 	if fileExist {
-		tablesContentByte, err = ioutil.ReadFile(outputPath + "/tables.go")
+		tablesContentByte, err = os.ReadFile(outputPath + "/tables.go")
 		if err != nil {
 			return err
 		}
@@ -290,7 +310,7 @@ func GenerateTables(outputPath, packageName string, tables []string, isNew bool)
 		lowerTable := strings.ToLower(tables[i])
 		if !strings.Contains(tablesContent, `"`+lowerTable+`"`) {
 			tableStr += fmt.Sprintf(`
-	"%s": Get%sTable, `, lowerTable, strings.Title(camelcase(tables[i])))
+	"%s": Get%sTable, `, lowerTable, cases.Title(textLang.Und).String(camelcase(tables[i])))
 
 			if commentStr != "" {
 				commentStr += `
@@ -354,7 +374,7 @@ var Generators = map[string]table.Generator{
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(outputPath+"/tables.go", c, 0644)
+	return os.WriteFile(outputPath+"/tables.go", c, 0644)
 }
 
 func InsertPermissionOfTable(conn db.Connection, table string) {
@@ -407,7 +427,7 @@ func camelcase(s string) string {
 		if i == 0 {
 			res += arr[i]
 		} else {
-			res += strings.Title(arr[i])
+			res += cases.Title(textLang.Und).String(arr[i])
 		}
 	}
 	return res
@@ -417,11 +437,11 @@ func getType(typeName string) string {
 	r, _ := regexp.Compile(`\(.*?\)`)
 	typeName = r.ReplaceAllString(typeName, "")
 	r2, _ := regexp.Compile(`unsigned(.*)`)
-	return strings.TrimSpace(strings.Title(strings.ToLower(r2.ReplaceAllString(typeName, ""))))
+	return strings.TrimSpace(cases.Title(textLang.Und).String(strings.ToLower(r2.ReplaceAllString(typeName, ""))))
 }
 
-func getFieldsFromConn(conn db.Connection, table, driver string) Fields {
-	columnsModel, _ := db.WithDriver(conn).Table(table).ShowColumns()
+func getFieldsFromConn(conn db.Connection, table, driver, connName string) Fields {
+	columnsModel, _ := db.WithDriver(conn).Table(table).ShowColumnsWithComment(conn.GetConfig(connName).Name)
 
 	fields := make(Fields, len(columnsModel))
 
@@ -442,13 +462,23 @@ func getFieldsFromConn(conn db.Connection, table, driver string) Fields {
 
 	for i, model := range columnsModel {
 		typeName := getType(model[typeField].(string))
+		isPrimaryKey := false
+		if columnKey, ok := model["Key"].(string); ok {
+			isPrimaryKey = columnKey == "PRI"
+		}
+
+		head := cases.Title(textLang.Und).String(model[fieldField].(string))
+		if comment, ok := model["Comment"].(string); ok && comment != "" {
+			head = cases.Title(textLang.Und).String(comment)
+		}
 		fields[i] = Field{
-			Head:     strings.Title(model[fieldField].(string)),
-			Name:     model[fieldField].(string),
-			DBType:   typeName,
-			CanAdd:   true,
-			Editable: true,
-			FormType: form.GetFormTypeFromFieldType(db.DT(strings.ToUpper(typeName)), model[fieldField].(string)),
+			Head:         head,
+			Name:         model[fieldField].(string),
+			DBType:       typeName,
+			CanAdd:       true,
+			Editable:     true,
+			IsPrimaryKey: isPrimaryKey,
+			FormType:     form.GetFormTypeFromFieldType(db.DT(strings.ToUpper(typeName)), model[fieldField].(string)),
 		}
 		if model[fieldField].(string) == "id" {
 			fields[i].Filterable = true

@@ -260,6 +260,11 @@ func (eng *Engine) SqliteConnection() db.Connection {
 	return db.GetConnectionFromService(eng.Services.Get(db.DriverSqlite))
 }
 
+// OceanBaseConnection return the OceanBase db connection of given driver.
+func (eng *Engine) OceanBaseConnection() db.Connection {
+	return db.GetConnectionFromService(eng.Services.Get(db.DriverOceanBase))
+}
+
 type ConnectionSetter func(db.Connection)
 
 // ResolveConnection resolve the specified driver connection.
@@ -399,7 +404,7 @@ func (eng *Engine) addJumpNavButton(param navJumpButtonParam) *Engine {
 }
 
 func printInitMsg(msg string) {
-	logger.Info("=====> " + msg)
+	logger.Info(msg)
 }
 
 func (eng *Engine) initJumpNavButtons() {
@@ -448,21 +453,21 @@ func (eng *Engine) initNavJumpButtonParams() []navJumpButtonParam {
 			Icon:       icon.Wrench,
 			BtnName:    types.NavBtnToolName,
 			URL:        "/info/generate/new",
-			Title:      "tool",
+			Title:      "code generate tool",
 			TitleScore: "tool",
 		}, {
 			Exist:      !eng.config.HideAppInfoEntrance,
 			Icon:       icon.Info,
 			BtnName:    types.NavBtnInfoName,
 			URL:        "/application/info",
-			Title:      "system info",
+			Title:      "site info",
 			TitleScore: "system",
 		}, {
 			Exist:      !eng.config.HidePluginEntrance,
 			Icon:       icon.Th,
 			BtnName:    types.NavBtnPlugName,
 			URL:        "/plugins",
-			Title:      "plugin",
+			Title:      "plugins",
 			TitleScore: "plugin",
 		},
 	}
@@ -521,26 +526,26 @@ func (eng *Engine) HTML(method, url string, fn types.GetPanelInfoFn, noAuth ...b
 	var handler = func(ctx *context.Context) {
 		panel, err := fn(ctx)
 		if err != nil {
-			panel = template.WarningPanel(err.Error())
+			panel = template.WarningPanel(ctx, err.Error())
 		}
 
 		eng.AdminPlugin().GetAddOperationFn()(panel.Callbacks...)
 
 		var (
-			tmpl, tmplName = template.Default().GetTemplate(ctx.IsPjax())
+			tmpl, tmplName = template.Default(ctx).GetTemplate(ctx.IsPjax())
 
 			user = auth.Auth(ctx)
 			buf  = new(bytes.Buffer)
 		)
 
-		hasError := tmpl.ExecuteTemplate(buf, tmplName, types.NewPage(&types.NewPageParam{
+		hasError := tmpl.ExecuteTemplate(buf, tmplName, types.NewPage(ctx, &types.NewPageParam{
 			User:         user,
 			Menu:         menu.GetGlobalMenu(user, eng.Adapter.GetConnection(), ctx.Lang()).SetActiveClass(config.URLRemovePrefix(ctx.Path())),
 			Panel:        panel.GetContent(eng.config.IsProductionEnvironment()),
-			Assets:       template.GetComponentAssetImportHTML(),
+			Assets:       template.GetComponentAssetImportHTML(ctx),
 			Buttons:      eng.NavButtons.CheckPermission(user),
-			TmplHeadHTML: template.Default().GetHeadHTML(),
-			TmplFootJS:   template.Default().GetFootJS(),
+			TmplHeadHTML: template.Default(ctx).GetHeadHTML(),
+			TmplFootJS:   template.Default(ctx).GetFootJS(),
 			Iframe:       ctx.IsIframe(),
 		}))
 
@@ -576,22 +581,22 @@ func (eng *Engine) HTMLFile(method, url, path string, data map[string]interface{
 		}
 
 		var (
-			tmpl, tmplName = template.Default().GetTemplate(ctx.IsPjax())
+			tmpl, tmplName = template.Default(ctx).GetTemplate(ctx.IsPjax())
 
 			user = auth.Auth(ctx)
 			buf  = new(bytes.Buffer)
 		)
 
-		hasError := tmpl.ExecuteTemplate(buf, tmplName, types.NewPage(&types.NewPageParam{
+		hasError := tmpl.ExecuteTemplate(buf, tmplName, types.NewPage(ctx, &types.NewPageParam{
 			User: user,
 			Menu: menu.GetGlobalMenu(user, eng.Adapter.GetConnection(), ctx.Lang()).SetActiveClass(eng.config.URLRemovePrefix(ctx.Path())),
 			Panel: types.Panel{
 				Content: template.HTML(cbuf.String()),
 			},
-			Assets:       template.GetComponentAssetImportHTML(),
+			Assets:       template.GetComponentAssetImportHTML(ctx),
 			Buttons:      eng.NavButtons.CheckPermission(user),
-			TmplHeadHTML: template.Default().GetHeadHTML(),
-			TmplFootJS:   template.Default().GetFootJS(),
+			TmplHeadHTML: template.Default(ctx).GetHeadHTML(),
+			TmplFootJS:   template.Default(ctx).GetFootJS(),
 			Iframe:       ctx.IsIframe(),
 		}))
 
@@ -638,22 +643,22 @@ func (eng *Engine) htmlFilesHandler(data map[string]interface{}, files ...string
 		}
 
 		var (
-			tmpl, tmplName = template.Default().GetTemplate(ctx.IsPjax())
+			tmpl, tmplName = template.Default(ctx).GetTemplate(ctx.IsPjax())
 
 			user = auth.Auth(ctx)
 			buf  = new(bytes.Buffer)
 		)
 
-		hasError := tmpl.ExecuteTemplate(buf, tmplName, types.NewPage(&types.NewPageParam{
+		hasError := tmpl.ExecuteTemplate(buf, tmplName, types.NewPage(ctx, &types.NewPageParam{
 			User: user,
 			Menu: menu.GetGlobalMenu(user, eng.Adapter.GetConnection(), ctx.Lang()).SetActiveClass(eng.config.URLRemovePrefix(ctx.Path())),
 			Panel: types.Panel{
 				Content: template.HTML(cbuf.String()),
 			},
-			Assets:       template.GetComponentAssetImportHTML(),
+			Assets:       template.GetComponentAssetImportHTML(ctx),
 			Buttons:      eng.NavButtons.CheckPermission(user),
-			TmplHeadHTML: template.Default().GetHeadHTML(),
-			TmplFootJS:   template.Default().GetFootJS(),
+			TmplHeadHTML: template.Default(ctx).GetHeadHTML(),
+			TmplFootJS:   template.Default(ctx).GetFootJS(),
 			Iframe:       ctx.IsIframe(),
 		}))
 
@@ -669,16 +674,16 @@ func (eng *Engine) htmlFilesHandler(data map[string]interface{}, files ...string
 func (eng *Engine) errorPanelHTML(ctx *context.Context, buf *bytes.Buffer, err error) {
 
 	user := auth.Auth(ctx)
-	tmpl, tmplName := template.Default().GetTemplate(ctx.IsPjax())
+	tmpl, tmplName := template.Default(ctx).GetTemplate(ctx.IsPjax())
 
-	hasError := tmpl.ExecuteTemplate(buf, tmplName, types.NewPage(&types.NewPageParam{
+	hasError := tmpl.ExecuteTemplate(buf, tmplName, types.NewPage(ctx, &types.NewPageParam{
 		User:         user,
 		Menu:         menu.GetGlobalMenu(user, eng.Adapter.GetConnection(), ctx.Lang()).SetActiveClass(eng.config.URLRemovePrefix(ctx.Path())),
-		Panel:        template.WarningPanel(err.Error()).GetContent(eng.config.IsProductionEnvironment()),
-		Assets:       template.GetComponentAssetImportHTML(),
+		Panel:        template.WarningPanel(ctx, err.Error()).GetContent(eng.config.IsProductionEnvironment()),
+		Assets:       template.GetComponentAssetImportHTML(ctx),
 		Buttons:      (*eng.NavButtons).CheckPermission(user),
-		TmplHeadHTML: template.Default().GetHeadHTML(),
-		TmplFootJS:   template.Default().GetFootJS(),
+		TmplHeadHTML: template.Default(ctx).GetHeadHTML(),
+		TmplFootJS:   template.Default(ctx).GetFootJS(),
 		Iframe:       ctx.IsIframe(),
 	}))
 
