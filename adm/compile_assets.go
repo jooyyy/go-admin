@@ -1,7 +1,7 @@
 package main
 
 import (
-	"io/ioutil"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -54,11 +54,11 @@ var AssetPaths = map[string]string{
 		listContent += `
 }`
 
-		err = ioutil.WriteFile(outputPath+"/assets_list.go", []byte(listContent), 0644)
+		err = io.WriteFile(outputPath+"/assets_list.go", []byte(listContent), 0644)
 		if err != nil {
 			return
 		}
-		err = ioutil.WriteFile(outputPath+"/assets_path.go", []byte(pathsContent), 0644)
+		err = io.WriteFile(outputPath+"/assets_path.go", []byte(pathsContent), 0644)
 		if err != nil {
 			return
 		}
@@ -67,7 +67,7 @@ var AssetPaths = map[string]string{
 
 func getAllFiles(dirPth string) (files []string, err error) {
 	var dirs []string
-	dir, err := ioutil.ReadDir(dirPth)
+	dir, err := io.ReadDir(dirPth)
 	if err != nil {
 		return nil, err
 	}

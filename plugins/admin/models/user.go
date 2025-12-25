@@ -37,7 +37,7 @@ type UserModel struct {
 
 	cacheReplacer *strings.Replacer
 }
-
+d
 // User return a default user model.
 func User() UserModel {
 	return UserModel{Base: Base{TableName: config.GetAuthUserTable()}}
